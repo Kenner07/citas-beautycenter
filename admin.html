@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Administración | Samantha Beauty Center</title>
+    <link rel="stylesheet" href="admin.css" />
+  </head>
+  <body>
+    <main class="admin-shell">
+      <section id="login-view" class="card login-card">
+        <p class="eyebrow">Samantha Beauty Center</p>
+        <h1>Panel administrativo</h1>
+        <p>Ingresa para gestionar las citas del salón.</p>
+        <form id="login-form">
+          <label>Usuario<input name="username" required autocomplete="username" /></label>
+          <label>Contraseña<input name="password" type="password" required autocomplete="current-password" /></label>
+          <button class="primary-button" type="submit">Iniciar sesión</button>
+          <p id="login-error" class="error" role="alert"></p>
+        </form>
+      </section>
+
+      <section id="dashboard-view" class="dashboard" hidden>
+        <header class="dashboard-header">
+          <div><p class="eyebrow">Samantha Beauty Center</p><h1>Gestión de citas</h1></div>
+          <button id="logout-button" class="secondary-button">Cerrar sesión</button>
+        </header>
+        <section class="card filters">
+          <label>Fecha<input id="date-filter" type="date" /></label>
+          <label>Estado<select id="status-filter"><option value="">Todos</option><option value="pendiente">Pendiente</option><option value="confirmada">Confirmada</option><option value="completada">Completada</option><option value="cancelada">Cancelada</option><option value="no_asistio">No asistió</option></select></label>
+          <button id="filter-button" class="primary-button">Actualizar</button>
+        </section>
+        <p id="dashboard-message" class="message" role="status"></p>
+        <section id="appointments-list" class="appointments"></section>
+      </section>
+    </main>
+    <script src="admin.js"></script>
+  </body>
+</html>

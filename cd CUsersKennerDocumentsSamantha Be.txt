@@ -1,0 +1,8 @@
+cd "C:\Users\Kenner\Documents\Samantha Beauty Center"
+
+git init
+git branch -M main
+git add Index.html app.js style.css
+git commit -m "Add Samantha Beauty Center booking interface"
+git remote add origin https://github.com/Kenner07/citas-beautycenter
+git push -u origin main

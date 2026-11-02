@@ -122,6 +122,18 @@ svg {
   text-decoration: none;
 }
 
+.brand-logo {
+  display: block;
+  width: 128px;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.brand-logo-wall {
+  width: 220px;
+}
+
 .logo-mark {
   position: relative;
   display: grid;
@@ -958,6 +970,14 @@ svg {
   .logo-mark {
     width: 210px;
     transform: scale(0.92);
+  }
+
+  .brand-logo {
+    width: 112px;
+  }
+
+  .brand-logo-wall {
+    width: 175px;
   }
 
   .main-nav {

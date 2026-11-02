@@ -40,7 +40,7 @@ const serviceCategories = [
   { id: 'otro', name: 'Otros' },
 ];
 
-const serviceCatalog = [
+const initialServiceCatalog = [
   { id: 1, name: 'Manicure', category: 'unas', duration: 45 },
   { id: 2, name: 'Pedicure', category: 'unas', duration: 60 },
   { id: 3, name: 'Manicure y pedicure', category: 'unas', duration: 90 },
@@ -49,13 +49,15 @@ const serviceCatalog = [
   { id: 6, name: 'Tinte', category: 'peluqueria', duration: 120 },
 ];
 
-const professionals = [
+const initialProfessionals = [
   { id: 1, name: 'Yise', specialty: 'Uñas', serviceIds: [1, 2, 3] },
   { id: 2, name: 'Yisela', specialty: 'Uñas', serviceIds: [1, 2, 3] },
   { id: 3, name: 'Sofia', specialty: 'Peluquería', serviceIds: [4, 5, 6] },
 ];
 
-const demoTimeSlots = ['9:00 a. m.', '10:00 a. m.', '11:30 a. m.', '1:00 p. m.', '2:30 p. m.', '4:00 p. m.'];
+const apiProtocol = window.location.protocol === 'file:' ? 'http:' : window.location.protocol;
+const apiHost = window.location.hostname || 'localhost';
+const API_BASE_URL = `${apiProtocol}//${apiHost}:8000/api`;
 
 function formatDate(date, options) {
   return new Intl.DateTimeFormat('es-CO', options).format(date);
@@ -144,11 +146,17 @@ function sparkleIcon() {
 
 function BrandLogo({ variant = 'header' }) {
   return React.createElement(
-    'div',
-    { className: `logo-mark logo-mark-${variant}`, 'aria-label': 'Samantha Beauty Center' },
-    React.createElement('span', { className: 'logo-brush' }),
-    React.createElement('span', { className: 'logo-name' }, 'Samantha'),
-    React.createElement('span', { className: 'logo-sub' }, 'Beauty Center')
+    'img',
+    {
+      className: `brand-logo brand-logo-${variant}`,
+      src: 'logo-samantha.png',
+      alt: 'Samantha Beauty Center',
+      style: {
+        width: variant === 'wall' ? '220px' : '128px',
+        maxWidth: '100%',
+        height: 'auto',
+      },
+    }
   );
 }
 
@@ -161,16 +169,39 @@ function App() {
   const [selectedTime, setSelectedTime] = React.useState('');
   const [bookingStep, setBookingStep] = React.useState(1);
   const [bookingSummary, setBookingSummary] = React.useState(null);
+  const [serviceCatalog, setServiceCatalog] = React.useState([]);
+  const [professionals, setProfessionals] = React.useState([]);
+  const [availability, setAvailability] = React.useState([]);
+  const [apiError, setApiError] = React.useState('');
 
-  const availableDates = React.useMemo(buildAvailableDates, []);
+  React.useEffect(() => {
+    fetch(`${API_BASE_URL}/services`)
+      .then((response) => response.json())
+      .then(setServiceCatalog)
+      .catch(() => setApiError('No se pudo conectar con la API. Inicia el backend en el puerto 8000.'));
+  }, []);
+
+  React.useEffect(() => {
+    if (!selectedService) return;
+    fetch(`${API_BASE_URL}/professionals?service_id=${selectedService.id}`)
+      .then((response) => response.json())
+      .then(setProfessionals)
+      .catch(() => setApiError('No se pudieron cargar los profesionales.'));
+  }, [selectedService]);
+
+  React.useEffect(() => {
+    if (!selectedService || !selectedProfessional) return;
+    fetch(`${API_BASE_URL}/availability?service_id=${selectedService.id}&professional_id=${selectedProfessional.id}`)
+      .then((response) => response.json())
+      .then((result) => setAvailability(result.dates))
+      .catch(() => setApiError('No se pudo cargar la disponibilidad.'));
+  }, [selectedService, selectedProfessional]);
   const filteredServices = serviceCatalog.filter((service) => {
     const matchesCategory = category === 'todos' || service.category === category;
     const matchesSearch = service.name.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es'));
     return matchesCategory && matchesSearch;
   });
-  const matchingProfessionals = selectedService
-    ? professionals.filter((professional) => professional.serviceIds.includes(selectedService.id))
-    : [];
+  const matchingProfessionals = selectedService ? professionals : [];
 
   function chooseService(service) {
     setSelectedService(service);
@@ -178,6 +209,7 @@ function App() {
     setSelectedDate('');
     setSelectedTime('');
     setBookingSummary(null);
+    setAvailability([]);
     setBookingStep(2);
   }
 
@@ -190,13 +222,31 @@ function App() {
 
   function handleBookingSubmit(event) {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    setBookingSummary({
+    const form = event.currentTarget instanceof HTMLFormElement
+      ? event.currentTarget
+      : event.currentTarget.closest('form');
+    if (!form) return;
+    const formData = new FormData(form);
+    const userData = {
       name: formData.get('name').trim(),
       phone: formData.get('phone').trim(),
       email: formData.get('email').trim(),
-    });
-    setBookingStep(4);
+    };
+    fetch(`${API_BASE_URL}/appointments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...userData, service_id: selectedService.id, professional_id: selectedProfessional.id, appointment_date: selectedDate, appointment_time: selectedTime }),
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'No se pudo guardar la cita.');
+        return data;
+      })
+      .then(() => {
+        setBookingSummary(userData);
+        setBookingStep(4);
+      })
+      .catch((error) => setApiError(error.message));
   }
 
   function resetBooking() {
@@ -330,8 +380,8 @@ function App() {
       React.createElement(
         'div',
         { className: 'demo-notice', role: 'status' },
-        React.createElement('strong', null, 'Personal y servicios: '),
-        'se muestran los registros activos revisados en la base local; esta página aún no consulta la base en tiempo real. Los horarios son de demostración y las reservas aún no se guardan.'
+        React.createElement('strong', null, apiError ? 'Error de conexión: ' : 'Datos en tiempo real: '),
+        apiError || 'Servicios, profesionales, disponibilidad y citas se consultan y guardan mediante la API.'
       ),
       React.createElement(
         'ol',
@@ -405,7 +455,7 @@ function App() {
                         type: 'button',
                         onClick: () => chooseService(service),
                       },
-                      React.createElement('span', { className: 'service-card-icon' }, service.category === 'Cabello' ? scissorsIcon() : service.category === 'Uñas' ? polishIcon() : lotusIcon()),
+                      React.createElement('span', { className: 'service-card-icon' }, service.category === 'peluqueria' ? scissorsIcon() : service.category === 'unas' ? polishIcon() : lotusIcon()),
                       React.createElement('span', { className: 'booking-service-copy' },
                         React.createElement('strong', null, service.name),
                         React.createElement('small', null, serviceCategories.find((item) => item.id === service.category).name)
@@ -477,9 +527,10 @@ function App() {
                 ),
                 React.createElement(
                   'div',
-                  { className: 'date-list', 'aria-label': 'Fechas disponibles de demostración' },
-                  availableDates.map((date) => {
-                    const dateKey = date.toISOString().slice(0, 10);
+                  { className: 'date-list', 'aria-label': 'Fechas disponibles' },
+                  availability.map((date) => {
+                    const dateKey = date.date;
+                    const dateObject = new Date(`${dateKey}T12:00:00`);
                     const selected = selectedDate === dateKey;
                     return React.createElement(
                       'button',
@@ -493,9 +544,9 @@ function App() {
                         },
                         'aria-pressed': selected,
                       },
-                      React.createElement('small', null, formatDate(date, { weekday: 'short' })),
-                      React.createElement('strong', null, formatDate(date, { day: 'numeric' })),
-                      React.createElement('small', null, formatDate(date, { month: 'short' }))
+                      React.createElement('small', null, formatDate(dateObject, { weekday: 'short' })),
+                      React.createElement('strong', null, formatDate(dateObject, { day: 'numeric' })),
+                      React.createElement('small', null, formatDate(dateObject, { month: 'short' }))
                     );
                   })
                 ),
@@ -507,7 +558,7 @@ function App() {
                     React.createElement(
                       'div',
                       { className: 'time-list' },
-                      demoTimeSlots.map((time) =>
+                      (availability.find((item) => item.date === selectedDate)?.slots || []).map((time) =>
                         React.createElement(
                           'button',
                           {
@@ -545,7 +596,7 @@ function App() {
               'div',
               { className: 'selected-service-banner' },
               React.createElement('div', null,
-                React.createElement('small', null, 'Tu cita de demostración'),
+                React.createElement('small', null, 'Tu cita'),
                 React.createElement('strong', null, selectedService.name),
                 React.createElement('span', null, `${selectedProfessional.name} · ${formatDate(new Date(`${selectedDate}T12:00:00`), { weekday: 'long', day: 'numeric', month: 'long' })} · ${selectedTime}`)
               ),
@@ -573,12 +624,12 @@ function App() {
                 React.createElement('input', { name: 'email', type: 'email', autoComplete: 'email', maxLength: 254, placeholder: 'tucorreo@ejemplo.com' })
               )
             ),
-            React.createElement('p', { className: 'privacy-note' }, 'En esta demostración, los datos solo se usan para mostrar el resumen y no se envían ni guardan.'),
+            React.createElement('p', { className: 'privacy-note' }, 'Tus datos se guardan para registrar la solicitud de cita.'),
             React.createElement(
               'div',
               { className: 'form-actions' },
               React.createElement('button', { type: 'button', className: 'btn btn-secondary', onClick: () => setBookingStep(2) }, 'Volver'),
-              React.createElement('button', { type: 'submit', className: 'btn btn-primary' }, 'Ver resumen', arrowIcon())
+              React.createElement('button', { type: 'button', className: 'btn btn-primary', onClick: handleBookingSubmit }, 'Ver resumen', arrowIcon())
             )
           ),
         bookingStep === 4 &&
@@ -589,9 +640,9 @@ function App() {
             'section',
             { className: 'booking-confirmation', 'aria-live': 'polite' },
             React.createElement('span', { className: 'confirmation-icon', 'aria-hidden': 'true' }, '✓'),
-            React.createElement('span', { className: 'step-kicker' }, 'Paso 4 · Resumen de demostración'),
+            React.createElement('span', { className: 'step-kicker' }, 'Paso 4 · Resumen'),
             React.createElement('h3', null, 'Tu solicitud está lista para revisar'),
-            React.createElement('p', null, 'Esto es solo una vista previa. La cita no se ha confirmado ni guardado.'),
+            React.createElement('p', null, 'Tu cita fue confirmada y guardada correctamente.'),
             React.createElement(
               'dl',
               { className: 'summary-list' },
@@ -619,7 +670,7 @@ function App() {
       { className: 'team-section', id: 'equipo' },
       React.createElement('p', { className: 'eyebrow' }, 'Un espacio para ti'),
       React.createElement('h2', null, 'Nuestro equipo te espera'),
-      React.createElement('p', null, 'El equipo y los servicios mostrados corresponden a los registros activos revisados en la base local. La página aún no se conecta a la base en tiempo real.')
+      React.createElement('p', null, 'Consulta nuestros servicios y profesionales disponibles para reservar tu cita.')
     ),
     React.createElement(
       'footer',
