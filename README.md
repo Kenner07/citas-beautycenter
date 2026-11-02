@@ -1,23 +1,36 @@
-# Samantha Beauty Center
+# Instrucciones de instalación y uso
 
-Sistema de reservas para Samantha Beauty Center. Incluye un frontend web, una API desarrollada con FastAPI, un panel administrativo y conexión a la base de datos MySQL `citas_flash`.
+## Requisitos del equipo servidor
 
-## Requisitos
+El equipo donde se ejecutan la API y la base de datos necesita:
 
-- Windows.
-- XAMPP con Apache y MySQL.
-- Python 3.10 o superior.
-- Un navegador web.
+- Windows 10 o Windows 11.
+- XAMPP instalado.
+- Apache y MySQL/MariaDB de XAMPP.
+- Python 3.10 o superior agregado al PATH.
+- Conexión a la red local.
+- Un navegador web actualizado.
+
+El equipo servidor puede ser un computador portátil o de escritorio. Debe permanecer encendido mientras otros dispositivos utilicen el sistema.
+
+## Requisitos de los dispositivos usuarios
+
+Los computadores, teléfonos o tabletas que accedan al sistema necesitan únicamente:
+
+- Un navegador actualizado, como Chrome, Edge, Firefox o Safari.
+- Estar conectados a la misma red Wi-Fi o red local del equipo servidor.
+
+No es necesario instalar Python, XAMPP ni la API en cada teléfono o computador usuario.
 
 ## 1. Preparar la base de datos
 
-1. Abre el panel de XAMPP.
-2. Inicia los servicios **Apache** y **MySQL**.
-3. Entra a `http://localhost/phpmyadmin`.
-4. Crea una base de datos llamada `citas_flash`.
-5. Importa el archivo `database/citas_flash.sql` si está incluido en la entrega.
+1. Abrir el panel de XAMPP.
+2. Iniciar **Apache** y **MySQL**.
+3. Abrir `http://localhost/phpmyadmin`.
+4. Crear una base de datos llamada `citas_flash`.
+5. Importar el archivo `database/citas_flash.sql`.
 
-La API utiliza por defecto estos datos de conexión:
+La conexión predeterminada de la API es:
 
 ```text
 Servidor: 127.0.0.1
@@ -27,7 +40,7 @@ Contraseña: vacía
 Base de datos: citas_flash
 ```
 
-Si MySQL tiene otra contraseña, configura estas variables antes de iniciar la API:
+Si el usuario root tiene contraseña, configurar estas variables en PowerShell antes de iniciar la API:
 
 ```powershell
 $env:DB_HOST = "127.0.0.1"
@@ -37,9 +50,9 @@ $env:DB_PASSWORD = "TU_CONTRASEÑA"
 $env:DB_NAME = "citas_flash"
 ```
 
-## 2. Iniciar la API
+## 2. Instalar e iniciar la API
 
-Abre una terminal en la carpeta principal del proyecto y ejecuta:
+Abrir PowerShell en la carpeta principal del proyecto y ejecutar:
 
 ```powershell
 cd backend
@@ -49,90 +62,95 @@ pip install -r requirements.txt
 .\start.ps1
 ```
 
-También puedes iniciar la API directamente con:
+La API quedará disponible en el puerto `8000`. Esta terminal debe permanecer abierta mientras se usa el programa.
 
-```powershell
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
+Para comprobar que funciona, abrir en el equipo servidor:
 
-La API debe permanecer ejecutándose mientras se realizan reservas o se utiliza el panel administrativo.
+`http://localhost:8000/api/health`
 
-Documentación de la API: `http://localhost:8000/docs`  
-Comprobación de conexión: `http://localhost:8000/api/health`
+La respuesta debe indicar que la API está conectada a la base de datos `citas_flash`.
 
-## 3. Iniciar el frontend
+## 3. Iniciar la página web
 
-Abre una segunda terminal en la carpeta principal y ejecuta:
+Abrir una segunda ventana de PowerShell en la carpeta principal del proyecto y ejecutar:
 
 ```powershell
 .\start-frontend.ps1
 ```
 
-Después abre `http://127.0.0.1:5500/Index.html`.
+Esta terminal también debe permanecer abierta.
 
-No se recomienda abrir `Index.html` haciendo doble clic, porque el navegador puede bloquear las peticiones de la API. El frontend debe abrirse mediante el servidor local.
+En el equipo servidor, abrir:
 
-## 4. Panel administrativo
+`http://localhost:5500/Index.html`
 
-El panel está disponible en `http://127.0.0.1:5500/admin.html`.
+No abrir `Index.html` haciendo doble clic. La página debe ejecutarse mediante `start-frontend.ps1` para que pueda comunicarse correctamente con la API.
 
-Credenciales iniciales para la demostración:
+## 4. Usar el sistema desde otro dispositivo
+
+El equipo servidor y el teléfono, tableta o computador deben estar conectados a la misma red Wi-Fi.
+
+1. En el equipo servidor abrir PowerShell.
+2. Ejecutar:
+
+```powershell
+ipconfig
+```
+
+3. Buscar la dirección **IPv4**, por ejemplo `192.168.1.25`.
+4. Desde el otro dispositivo abrir:
+
+`http://192.168.1.25:5500/Index.html`
+
+Se debe reemplazar `192.168.1.25` por la IPv4 real del equipo servidor.
+
+Para acceder al panel administrativo desde otro dispositivo, abrir:
+
+`http://192.168.1.25:5500/admin.html`
+
+Credenciales iniciales del panel:
 
 ```text
 Usuario: admin
 Contraseña: admin123
 ```
 
-Desde el panel se pueden consultar las citas y cambiar su estado a confirmada, completada, cancelada o no asistió.
+## 5. Configuración del Firewall de Windows
 
-## 5. Abrir el sistema desde un teléfono
+Si otro dispositivo no puede abrir la página:
 
-El computador y el teléfono deben estar conectados a la misma red Wi-Fi.
+1. Permitir Python en el Firewall de Windows cuando aparezca la ventana de autorización.
+2. Permitir conexiones privadas para Python.
+3. Verificar que ambos dispositivos estén en la misma red Wi-Fi.
+4. Confirmar que las terminales de la API y del frontend sigan abiertas.
+5. Comprobar que se esté utilizando la IPv4 correcta.
 
-1. Inicia la API con `backend\\start.ps1`.
-2. Inicia el frontend con `start-frontend.ps1`.
-3. En PowerShell ejecuta `ipconfig`.
-4. Busca la dirección IPv4 del computador, por ejemplo `192.168.1.25`.
-5. En el teléfono abre `http://192.168.1.25:5500/Index.html`.
+Si es necesario, crear reglas para permitir los puertos TCP `5500` y `8000` en redes privadas.
 
-Si no carga, permite Python en el Firewall de Windows y verifica que ambos dispositivos estén en la misma red.
+## 6. Acceso desde Internet
 
-## 6. Entrega del proyecto en un archivo ZIP
+Las instrucciones anteriores permiten usar el sistema desde cualquier dispositivo conectado a la misma red local.
 
-El archivo ZIP debe incluir el código fuente, la API, los scripts de inicio, el logo y el respaldo SQL de la base de datos:
+Para usarlo desde cualquier lugar a través de Internet se necesita publicar la API, la página web y la base de datos en un servidor de hosting o VPS. También se recomienda configurar un dominio, HTTPS, copias de seguridad y proteger las credenciales de la base de datos. Un archivo ZIP por sí solo no permite que el sistema sea accesible desde Internet.
 
-```text
-Samantha Beauty Center/
-├── Index.html
-├── admin.html
-├── app.js
-├── admin.js
-├── style.css
-├── admin.css
-├── logo-samantha.png
-├── start-frontend.ps1
-├── README.md
-├── database/
-│   └── citas_flash.sql
-└── backend/
-    ├── main.py
-    ├── requirements.txt
-    ├── start.ps1
-    └── migrations/
-```
+## 7. Solución de errores frecuentes
 
-No es necesario incluir:
+### Error de conexión con la API
 
-- La carpeta `.venv`.
-- La carpeta de datos interna de XAMPP.
-- Archivos temporales.
-- La base SQLite antigua `backend/samantha_beauty.db`.
+- Confirmar que la terminal de la API esté abierta.
+- Abrir `http://localhost:8000/api/health`.
+- Verificar que MySQL esté iniciado en XAMPP.
+- Confirmar que la base de datos se llame `citas_flash`.
 
-Para evaluar el proyecto, el profesor debe instalar XAMPP y Python, importar `citas_flash.sql`, iniciar la API y después iniciar el frontend siguiendo los pasos anteriores.
+### No se guardan las citas
 
-## Tecnologías
+- Confirmar que MySQL esté funcionando.
+- Confirmar que la API esté conectada a `citas_flash`.
+- Revisar que la tabla `citas` exista después de importar el archivo SQL.
 
-- HTML, CSS y JavaScript con React mediante CDN.
-- Python y FastAPI.
-- MySQL/MariaDB mediante PyMySQL.
-- XAMPP para el entorno local de base de datos.
+### La página no abre desde el teléfono
+
+- Verificar que ambos dispositivos estén en la misma red.
+- Usar la IPv4 del equipo servidor, no `localhost`.
+- Revisar el Firewall de Windows.
+- Mantener abierto el servidor frontend.
