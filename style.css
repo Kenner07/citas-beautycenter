@@ -1616,6 +1616,13 @@ svg {
   text-align: left;
 }
 
+.confirmation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
 .summary-row {
   display: flex;
   justify-content: space-between;

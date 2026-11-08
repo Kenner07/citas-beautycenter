@@ -63,6 +63,48 @@ function formatDate(date, options) {
   return new Intl.DateTimeFormat('es-CO', options).format(date);
 }
 
+function icsEscape(value) {
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/([,;])/g, '\\$1')
+    .replace(/\r?\n/g, '\\n');
+}
+
+function buildAppointmentIcs({ serviceName, professionalName, clientName, appointmentDate, appointmentTime, duration }) {
+  const [year, month, day] = appointmentDate.split('-').map(Number);
+  const [hours, minutes] = appointmentTime.split(':').map(Number);
+  const start = new Date(year, month - 1, day, hours, minutes);
+  const end = new Date(start.getTime() + Number(duration) * 60 * 1000);
+  const toIcsDate = (date) => [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+    'T',
+    String(date.getHours()).padStart(2, '0'),
+    String(date.getMinutes()).padStart(2, '0'),
+    '00',
+  ].join('');
+  const now = new Date().toISOString().replace(/[-:.]/g, '').replace(/\d{3}Z$/, 'Z');
+
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Samantha Beauty Center//Citas//ES',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:samantha-appointment-${Date.now()}@samanthabeautycenter`,
+    `DTSTAMP:${now}`,
+    `DTSTART:${toIcsDate(start)}`,
+    `DTEND:${toIcsDate(end)}`,
+    `SUMMARY:${icsEscape(`Cita - ${serviceName}`)}`,
+    `DESCRIPTION:${icsEscape(`Cliente: ${clientName}\nProfesional: ${professionalName}\nSamantha Beauty Center`)}`,
+    'LOCATION:Samantha Beauty Center',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n') + '\r\n';
+}
+
 function buildAvailableDates() {
   const dates = [];
   const today = new Date();
@@ -242,8 +284,8 @@ function App() {
         if (!response.ok) throw new Error(data.detail || 'No se pudo guardar la cita.');
         return data;
       })
-      .then(() => {
-        setBookingSummary(userData);
+      .then((data) => {
+        setBookingSummary({ ...userData, emailSent: data.emailSent });
         setBookingStep(4);
       })
       .catch((error) => setApiError(error.message));
@@ -256,6 +298,26 @@ function App() {
     setSelectedTime('');
     setBookingSummary(null);
     setBookingStep(1);
+  }
+
+  function downloadCalendarFile() {
+    const icsContent = buildAppointmentIcs({
+      serviceName: selectedService.name,
+      professionalName: selectedProfessional.name,
+      clientName: bookingSummary.name,
+      appointmentDate: selectedDate,
+      appointmentTime: selectedTime,
+      duration: selectedService.duration,
+    });
+    const file = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'cita-samantha-beauty-center.ics';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   return React.createElement(
@@ -620,11 +682,11 @@ function App() {
                 React.createElement('input', { name: 'phone', type: 'tel', autoComplete: 'tel', required: true, maxLength: 30, placeholder: 'Tu número de contacto' })
               ),
               React.createElement('label', { className: 'form-field form-field-wide' },
-                React.createElement('span', null, 'Correo electrónico (opcional)'),
-                React.createElement('input', { name: 'email', type: 'email', autoComplete: 'email', maxLength: 254, placeholder: 'tucorreo@ejemplo.com' })
+                React.createElement('span', null, 'Correo electrónico'),
+                React.createElement('input', { name: 'email', type: 'email', autoComplete: 'email', required: true, maxLength: 254, placeholder: 'tucorreo@ejemplo.com' })
               )
             ),
-            React.createElement('p', { className: 'privacy-note' }, 'Tus datos se guardan para registrar la solicitud de cita.'),
+            React.createElement('p', { className: 'privacy-note' }, 'Te enviaremos la confirmaciÃ³n y el archivo de calendario a este correo.'),
             React.createElement(
               'div',
               { className: 'form-actions' },
@@ -642,7 +704,9 @@ function App() {
             React.createElement('span', { className: 'confirmation-icon', 'aria-hidden': 'true' }, '✓'),
             React.createElement('span', { className: 'step-kicker' }, 'Paso 4 · Resumen'),
             React.createElement('h3', null, 'Tu solicitud está lista para revisar'),
-            React.createElement('p', null, 'Tu cita fue confirmada y guardada correctamente.'),
+            React.createElement('p', null, bookingSummary.emailSent
+              ? 'Tu cita fue confirmada y te enviamos los detalles junto con el archivo de calendario.'
+              : 'Tu cita fue confirmada y guardada. Configura el correo del servidor para recibir la confirmación por email.'),
             React.createElement(
               'dl',
               { className: 'summary-list' },
@@ -661,7 +725,12 @@ function App() {
                 )
               )
             ),
-            React.createElement('button', { type: 'button', className: 'btn btn-primary', onClick: resetBooking }, 'Empezar otra reserva')
+            React.createElement(
+              'div',
+              { className: 'confirmation-actions' },
+              React.createElement('button', { type: 'button', className: 'btn btn-primary', onClick: downloadCalendarFile }, 'Añadir al calendario'),
+              React.createElement('button', { type: 'button', className: 'btn btn-secondary', onClick: resetBooking }, 'Empezar otra reserva')
+            )
           )
       )
     ),

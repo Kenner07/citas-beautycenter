@@ -1,10 +1,12 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import base64
 import hashlib
 import hmac
 import os
 import secrets
+import smtplib
 import time
+from email.message import EmailMessage
 
 import pymysql
 from fastapi import FastAPI, Header, HTTPException, Query
@@ -66,6 +68,74 @@ class LoginInput(BaseModel):
 
 class AppointmentStatusInput(BaseModel):
     status: str = Field(pattern=r"^(pendiente|confirmada|completada|cancelada|no_asistio)$")
+
+
+def ics_escape(value: str) -> str:
+    return str(value).replace("\\", "\\\\").replace("\n", "\\n").replace(",", "\\,").replace(";", "\\;")
+
+
+def build_ics(appointment_id: int, service_name: str, professional_name: str, client_name: str, appointment_date: date, appointment_time: str, duration: int) -> str:
+    start = datetime.combine(appointment_date, datetime.strptime(appointment_time, "%H:%M").time())
+    end = start + timedelta(minutes=duration)
+    format_ics = lambda value: value.strftime("%Y%m%dT%H%M%S")
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Samantha Beauty Center//Citas//ES",
+        "CALSCALE:GREGORIAN",
+        "BEGIN:VEVENT",
+        f"UID:samantha-appointment-{appointment_id}@samanthabeautycenter",
+        f"DTSTART;TZID=America/Bogota:{format_ics(start)}",
+        f"DTEND;TZID=America/Bogota:{format_ics(end)}",
+        f"SUMMARY:{ics_escape(f'Cita - {service_name}')} ".rstrip(),
+        f"DESCRIPTION:{ics_escape(f'Cliente: {client_name}\\nProfesional: {professional_name}\\nServicio: {service_name}')} ",
+        "LOCATION:Samantha Beauty Center",
+        "STATUS:CONFIRMED",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ]
+    return "\r\n".join(line.rstrip() for line in lines) + "\r\n"
+
+
+def send_appointment_email(*, recipient: str, appointment_id: int, client_name: str, service_name: str, professional_name: str, appointment_date: date, appointment_time: str, duration: int) -> bool:
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    if not smtp_user or not smtp_password:
+        return False
+
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "465"))
+    sender = os.getenv("EMAIL_FROM", smtp_user)
+    date_text = appointment_date.strftime("%d/%m/%Y")
+    ics_content = build_ics(appointment_id, service_name, professional_name, client_name, appointment_date, appointment_time, duration)
+
+    message = EmailMessage()
+    message["Subject"] = "Confirmación de tu cita - Samantha Beauty Center"
+    message["From"] = sender
+    message["To"] = recipient
+    message.set_content(
+        f"Hola {client_name},\n\n"
+        "Tu cita en Samantha Beauty Center fue confirmada:\n\n"
+        f"Servicio: {service_name}\n"
+        f"Profesional: {professional_name}\n"
+        f"Fecha: {date_text}\n"
+        f"Hora: {appointment_time}\n"
+        f"Duración: {duration} minutos\n\n"
+        "Adjuntamos un archivo para agregar la cita a tu calendario.\n\n"
+        "Te esperamos.\nSamantha Beauty Center"
+    )
+    message.add_attachment(ics_content.encode("utf-8"), maintype="text", subtype="calendar", filename="cita-samantha-beauty-center.ics")
+
+    if smtp_port == 465:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20) as smtp:
+            smtp.login(smtp_user, smtp_password)
+            smtp.send_message(message)
+    else:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as smtp:
+            smtp.starttls()
+            smtp.login(smtp_user, smtp_password)
+            smtp.send_message(message)
+    return True
 
 
 def verify_password(password: str, encoded: str) -> bool:
@@ -185,8 +255,8 @@ def availability(professional_id: int, service_id: int) -> dict:
 @app.post("/api/appointments", status_code=201)
 def create_appointment(payload: AppointmentInput) -> dict:
     with connect_db() as db:
-        service = db.execute("SELECT id_servicio, duracion_minutos AS duration FROM servicios WHERE id_servicio = %s AND activo = 1", (payload.service_id,)).fetchone()
-        professional = db.execute("SELECT e.id_empleada FROM empleadas e INNER JOIN empleadas_servicios es ON es.id_empleada = e.id_empleada WHERE e.id_empleada = %s AND es.id_servicio = %s AND es.activo = 1 AND e.activo = 1", (payload.professional_id, payload.service_id)).fetchone()
+        service = db.execute("SELECT id_servicio, nombre AS name, duracion_minutos AS duration FROM servicios WHERE id_servicio = %s AND activo = 1", (payload.service_id,)).fetchone()
+        professional = db.execute("SELECT e.id_empleada, CONCAT(e.nombre, IFNULL(CONCAT(' ', e.apellido), '')) AS name FROM empleadas e INNER JOIN empleadas_servicios es ON es.id_empleada = e.id_empleada WHERE e.id_empleada = %s AND es.id_servicio = %s AND es.activo = 1 AND e.activo = 1", (payload.professional_id, payload.service_id)).fetchone()
         schedule = db.execute("SELECT hora_inicio, hora_fin FROM horarios_empleadas WHERE id_empleada = %s AND dia_semana = %s AND activo = 1", (payload.professional_id, payload.appointment_date.weekday() + 1)).fetchone()
         if not service or not professional:
             raise HTTPException(400, "El servicio o profesional no está disponible.")
@@ -206,7 +276,22 @@ def create_appointment(payload: AppointmentInput) -> dict:
             client_id = db.execute("INSERT INTO clientes (nombre, telefono, correo, activo) VALUES (%s, %s, %s, 1)", (payload.name, payload.phone, payload.email)).lastrowid
         appointment_id = db.execute("INSERT INTO citas (id_cliente, id_empleada, id_servicio, fecha, hora_inicio, duracion_minutos, estado, estado_sincronizacion) VALUES (%s, %s, %s, %s, %s, %s, 'confirmada', 'pendiente')", (client_id, payload.professional_id, payload.service_id, payload.appointment_date, payload.appointment_time, service["duration"])).lastrowid
         db.execute("INSERT INTO auditoria (entidad, id_registro, accion, detalle) VALUES ('cita', %s, 'crear', 'Reserva creada desde el portal público')", (str(appointment_id),))
-    return {"id": appointment_id, "userId": client_id, "status": "confirmed", **payload.model_dump(mode="json")}
+    email_sent = False
+    if payload.email:
+        try:
+            email_sent = send_appointment_email(
+                recipient=payload.email,
+                appointment_id=appointment_id,
+                client_name=payload.name,
+                service_name=service["name"],
+                professional_name=professional["name"],
+                appointment_date=payload.appointment_date,
+                appointment_time=payload.appointment_time,
+                duration=service["duration"],
+            )
+        except (OSError, smtplib.SMTPException) as error:
+            print(f"No se pudo enviar el correo de la cita {appointment_id}: {error}")
+    return {"id": appointment_id, "userId": client_id, "status": "confirmed", "emailSent": email_sent, **payload.model_dump(mode="json")}
 
 
 @app.get("/api/appointments")
